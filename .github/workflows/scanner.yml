@@ -1,0 +1,45 @@
+name: Albion BM Scanner
+
+on:
+  schedule:
+    - cron: "*/20 * * * *"   # каждые 20 минут
+  workflow_dispatch:           # кнопка ручного запуска в Actions
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run BM Scanner
+        env:
+          TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          PROFIT_THRESHOLD: ${{ vars.PROFIT_THRESHOLD || '500000' }}
+          GIST_ID:          ${{ secrets.GIST_ID }}
+          GIST_TOKEN:       ${{ secrets.GIST_TOKEN }}
+          LOOP_MODE:        "false"
+        run: python albion_bm_scanner_v4.py
+
+      - name: Upload CSV artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-results-${{ github.run_number }}
+          path: |
+            profit_analysis.csv
+            raw_prices.csv
+            materials_prices.csv
+          retention-days: 3   # хранить 3 дня, потом удаляются сами
