@@ -2,8 +2,14 @@ name: Albion BM Scanner
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # каждые 10 минут (публичное репо = бесплатно)
-  workflow_dispatch:           # кнопка ручного запуска
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+# Нужны права для записи в репо (GitHub Pages)
+permissions:
+  contents: write
+  pages: write
+  id-token: write
 
 jobs:
   scan:
@@ -31,6 +37,17 @@ jobs:
           GIST_TOKEN:       ${{ secrets.GIST_TOKEN }}
           LOOP_MODE:        "false"
         run: python albion_bm_scanner_v4.py
+
+      - name: Deploy report to GitHub Pages
+        if: always()
+        run: |
+          git config --global user.name  "Albion Scanner Bot"
+          git config --global user.email "scanner@albion.bot"
+          git add docs/index.html || true
+          git diff --staged --quiet || git commit -m "📊 Scan update $(TZ='Europe/Moscow' date '+%d.%m.%Y %H:%M МСК')"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload CSV artifacts
         if: always()
