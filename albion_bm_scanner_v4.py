@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-
 import requests
 import csv
 import json
@@ -172,25 +171,26 @@ def build_html_report(profit_rows: list, mat_rows: list, ts: str) -> str:
     good = [r for r in profit_rows if r["profitable_avg"] == "YES"]
     all_with_data = profit_rows[:200]
 
-    def row_color(profit):
-        if profit > 1_000_000: return "#d4edda"
-        if profit > 500_000:   return "#c8f7c5"
-        if profit > 0:         return "#eafaf1"
-        return "#fff5f5"
+    def row_style(profit):
+        # Светлый фон + тёмный текст (читаемо на любой теме)
+        if profit > 1_000_000: return "background:#d4edda;color:#1f2328"
+        if profit > 500_000:   return "background:#c8f7c5;color:#1f2328"
+        if profit > 0:         return "background:#eafaf1;color:#1f2328"
+        return "background:#fff5f5;color:#1f2328"
 
     good_rows_html = ""
-    for r in good[:50]:
+    for r in good[:20]:
         tier_enc = f"T{r['tier']}.{r['enchant']}"
         qi = q_icon.get(r["quality"], "")
         qn = q_name.get(r["quality"], str(r["quality"]))
-        color = row_color(r["profit_avg"])
+        color = row_style(r["profit_avg"])
         fresh_color = "#28a745" if "✅" in r["bm_freshness"] else ("#ffc107" if "⚠" in r["bm_freshness"] else "#dc3545")
         good_rows_html += (
-            f'<tr style="background:{color}">'
+            f'<tr style="{color}">'
             f'<td><b>{tier_enc}</b></td>'
             f'<td>{r["name_ru"]}</td>'
             f'<td>{qi} {qn}</td>'
-            f'<td style="text-align:right"><b style="color:#1a7f37">+{r["profit_avg"]:,}</b></td>'
+            f'<td style="text-align:right"><b style="color:#1a7f37;font-size:14px">+{r["profit_avg"]:,}</b></td>'
             f'<td style="text-align:right">{r["roi_avg_pct"]:+.1f}%</td>'
             f'<td style="text-align:right">{r["base_sell_caerleon"]:,}</td>'
             f'<td style="text-align:right">{r["bm_buy_order"]:,}</td>'
@@ -417,12 +417,14 @@ MATERIAL_IDS = {
     5: {"R": "T5_RUNE", "S": "T5_SOUL", "RE": "T5_RELIC"},
     6: {"R": "T6_RUNE", "S": "T6_SOUL", "RE": "T6_RELIC"},
     7: {"R": "T7_RUNE", "S": "T7_SOUL", "RE": "T7_RELIC"},
+    8: {"R": "T8_RUNE", "S": "T8_SOUL", "RE": "T8_RELIC"},  # T8: только @1 → нужна только Руна
 }
 # Русские названия материалов
 MAT_RU = {
     "T5_RUNE": "Руна (эксперт)",   "T5_SOUL": "Душа (эксперт)",   "T5_RELIC": "Реликт (эксперт)",
     "T6_RUNE": "Руна (мастер)",    "T6_SOUL": "Душа (мастер)",    "T6_RELIC": "Реликт (мастер)",
     "T7_RUNE": "Руна (магистр)",   "T7_SOUL": "Душа (магистр)",   "T7_RELIC": "Реликт (магистр)",
+    "T8_RUNE": "Руна (старейшины)","T8_SOUL": "Душа (старейшины)","T8_RELIC": "Реликт (старейшины)",
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -559,7 +561,7 @@ FALLBACK_RU: dict[str, str] = {
     "BAG":         "Сумка",
     "BAG_INSIGHT": "Кошель интуиции",
 }
-TIER_RU = {5: "(эксперт)", 6: "(мастер)", 7: "(магистр)"}
+TIER_RU = {5: "(эксперт)", 6: "(мастер)", 7: "(магистр)", 8: "(старейшины)"}
 
 
 def get_name(uid: str, names_db: dict) -> dict:
@@ -589,7 +591,7 @@ def build_items(names_db: dict) -> dict:
             "name_en": n["en"],
         }
 
-    for t in [5, 6, 7]:
+    for t in [5, 6, 7, 8]:
         p = f"T{t}_"
         for w in [
             "2H_AXE","2H_BOW","2H_WARBOW","2H_LONGBOW","2H_CROSSBOW","2H_CROSSBOWLARGE",
@@ -795,7 +797,11 @@ def scan_once(seen_alerts: set) -> set:
     print("\n[2/6] Строим список вещей...")
     items    = build_items(names_db)
     base_ids = list(items.keys())
-    enc_ids  = [f"{iid}@{e}" for iid in base_ids for e in [1, 2, 3]]
+    enc_ids  = [
+        f"{iid}@{e}"
+        for iid in base_ids
+        for e in ([1] if items[iid]["tier"] == 8 else [1, 2, 3])
+    ]
     mat_ids  = [mid for tm in MATERIAL_IDS.values() for mid in tm.values()]
     print(f"  Вещей: {len(items)} | Зачарованных ID: {len(enc_ids)} | Материалов: {len(mat_ids)}")
 
@@ -873,15 +879,20 @@ def scan_once(seen_alerts: set) -> set:
     print("  │  ПРИМЕР ЗАТРАТ: Большой топор / Нагрудник (кол-во × цена = итого)                        │")
     print("  │  Три сценария: BEST (sell_min, если хватит объёма) / AVG (реально) / WORST (sell_max)     │")
     print("  ├────────────┬────────────────────────────────────────────────────────────────────────────────┤")
-    for tier in [5, 6, 7]:
+    for tier in [5, 6, 7, 8]:
         tm = mat.get(tier, {})
         r = tm.get("R", {}); s = tm.get("S", {}); re = tm.get("RE", {})
         print(f"  │ T{tier} 2H оружие (384 на шаг):                                                              │")
-        for enc_label, mats_used in [
-            ("@0→@1 (покупаешь Руны)", [("R", 384)]),
-            ("@0→@2 (Руны + Души)",    [("R", 384), ("S", 384)]),
-            ("@0→@3 (+Реликты)",       [("R", 384), ("S", 384), ("RE", 384)]),
-        ]:
+        enc_options = (
+            [("@0→@1 (покупаешь Руны)", [("R", 384)])]
+            if tier == 8 else
+            [
+                ("@0→@1 (покупаешь Руны)", [("R", 384)]),
+                ("@0→@2 (Руны + Души)",    [("R", 384), ("S", 384)]),
+                ("@0→@3 (+Реликты)",       [("R", 384), ("S", 384), ("RE", 384)]),
+            ]
+        )
+        for enc_label, mats_used in enc_options:
             cost_b = sum(tm.get(k,{}).get("sell_min",0)*q for k,q in mats_used)
             cost_a = sum(tm.get(k,{}).get("avg",0)*q for k,q in mats_used)
             cost_w = sum(tm.get(k,{}).get("sell_max",0)*q for k,q in mats_used)
@@ -922,7 +933,8 @@ def scan_once(seen_alerts: set) -> set:
         for quality, q_name in QUALITIES.items():
             base_sell = base_p.get((iid, quality), {}).get("sell_min", 0)
 
-            for enc in [1, 2, 3]:
+            max_enc = 1 if tier == 8 else 3
+            for enc in range(1, max_enc + 1):
                 enc_entry = enc_p.get((f"{iid}@{enc}", quality), {})
                 bm_buy      = enc_entry.get("buy_max", 0)
                 bm_upd_date = enc_entry.get("buy_max_date", "")
