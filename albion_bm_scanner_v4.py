@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+
 import requests
 import csv
 import json
@@ -161,7 +163,199 @@ def build_summary_md(profit_rows: list, ts: str) -> str:
             f"| {r['profit_best']:+,} | {r['profit_avg']:+,} | {r['profit_worst']:+,} |"
         )
     lines += ["", "</details>", "", f"_Следующий скан через ~20 минут_"]
-    return "\n".join(lines)
+
+
+def build_html_report(profit_rows: list, mat_rows: list, ts: str) -> str:
+    """Генерирует HTML-страницу с отчётом для GitHub Pages."""
+    q_name = {1: "Normal", 2: "Good", 3: "Outstanding", 4: "Excellent"}
+    q_icon = {1: "⚪", 2: "🟢", 3: "🔵", 4: "🟡"}
+    good = [r for r in profit_rows if r["profitable_avg"] == "YES"]
+    all_with_data = profit_rows[:200]
+
+    def row_color(profit):
+        if profit > 1_000_000: return "#d4edda"
+        if profit > 500_000:   return "#c8f7c5"
+        if profit > 0:         return "#eafaf1"
+        return "#fff5f5"
+
+    good_rows_html = ""
+    for r in good[:50]:
+        tier_enc = f"T{r['tier']}.{r['enchant']}"
+        qi = q_icon.get(r["quality"], "")
+        qn = q_name.get(r["quality"], str(r["quality"]))
+        color = row_color(r["profit_avg"])
+        fresh_color = "#28a745" if "✅" in r["bm_freshness"] else ("#ffc107" if "⚠" in r["bm_freshness"] else "#dc3545")
+        good_rows_html += (
+            f'<tr style="background:{color}">'
+            f'<td><b>{tier_enc}</b></td>'
+            f'<td>{r["name_ru"]}</td>'
+            f'<td>{qi} {qn}</td>'
+            f'<td style="text-align:right"><b style="color:#1a7f37">+{r["profit_avg"]:,}</b></td>'
+            f'<td style="text-align:right">{r["roi_avg_pct"]:+.1f}%</td>'
+            f'<td style="text-align:right">{r["base_sell_caerleon"]:,}</td>'
+            f'<td style="text-align:right">{r["bm_buy_order"]:,}</td>'
+            f'<td style="text-align:right">{r["total_avg"]:,}</td>'
+            f'<td>{r["mat_buy_desc"]}</td>'
+            f'<td style="color:{fresh_color};white-space:nowrap">{r["bm_freshness"]}</td>'
+            '</tr>\n'
+        )
+
+    all_rows_html = ""
+    for r in all_with_data:
+        tier_enc = f"T{r['tier']}.{r['enchant']}"
+        profit_color = "#1a7f37" if r["profit_avg"] > 0 else "#cf222e"
+        all_rows_html += (
+            f'<tr>'
+            f'<td>{tier_enc}</td>'
+            f'<td>{r["name_ru"]}</td>'
+            f'<td>{q_name.get(r["quality"],str(r["quality"]))}</td>'
+            f'<td style="text-align:right;color:{profit_color}">{r["profit_avg"]:+,}</td>'
+            f'<td style="text-align:right">{r["profit_best"]:+,}</td>'
+            f'<td style="text-align:right">{r["profit_worst"]:+,}</td>'
+            f'<td style="text-align:right">{r["bm_buy_order"]:,}</td>'
+            f'<td>{r["bm_freshness"]}</td>'
+            '</tr>\n'
+        )
+
+    mat_rows_html = ""
+    for m in mat_rows:
+        mat_rows_html += (
+            f'<tr><td>{m["name_ru"]}</td>'
+            f'<td style="text-align:right">{m["sell_price_min"]:,}</td>'
+            f'<td style="text-align:right">{m["avg_price_24h"]:,}</td>'
+            f'<td style="text-align:right">{m["sell_price_max"]:,}</td>'
+            f'<td style="text-align:right">{m["volume_24h"]:,}</td></tr>\n'
+        )
+
+    return f"""<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="refresh" content="600">
+<title>Albion BM Scanner</title>
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+         background: #0d1117; color: #e6edf3; font-size: 13px; }}
+  .header {{ background: #161b22; border-bottom: 1px solid #30363d;
+             padding: 16px 24px; display: flex; align-items: center; gap: 16px; }}
+  .header h1 {{ font-size: 20px; font-weight: 600; color: #f0f6fc; }}
+  .badge {{ background: #238636; color: #fff; border-radius: 12px;
+            padding: 2px 10px; font-size: 12px; font-weight: 500; }}
+  .badge.grey {{ background: #30363d; }}
+  .ts {{ color: #8b949e; font-size: 12px; margin-left: auto; }}
+  .container {{ max-width: 1400px; margin: 0 auto; padding: 24px; }}
+  .section {{ margin-bottom: 32px; }}
+  .section-title {{ font-size: 16px; font-weight: 600; color: #f0f6fc;
+                    margin-bottom: 12px; padding-bottom: 8px;
+                    border-bottom: 1px solid #30363d; }}
+  .stats {{ display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }}
+  .stat {{ background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+           padding: 16px 20px; flex: 1; min-width: 160px; }}
+  .stat-value {{ font-size: 24px; font-weight: 700; color: #58a6ff; }}
+  .stat-label {{ color: #8b949e; font-size: 12px; margin-top: 4px; }}
+  table {{ width: 100%; border-collapse: collapse; background: #161b22;
+           border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }}
+  th {{ background: #21262d; color: #8b949e; font-weight: 500; font-size: 11px;
+        text-transform: uppercase; padding: 10px 12px; text-align: left;
+        border-bottom: 1px solid #30363d; white-space: nowrap; }}
+  td {{ padding: 8px 12px; border-bottom: 1px solid #21262d; }}
+  tr:last-child td {{ border-bottom: none; }}
+  tr:hover {{ background: rgba(177,186,196,0.06); }}
+  .profit-high {{ color: #3fb950; font-weight: 600; }}
+  details summary {{ cursor: pointer; color: #58a6ff; padding: 8px 0;
+                     font-size: 13px; user-select: none; }}
+  details summary:hover {{ color: #79c0ff; }}
+  .footer {{ text-align: center; color: #484f58; font-size: 11px;
+             padding: 24px; border-top: 1px solid #21262d; }}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>⚔️ Albion BM Scanner</h1>
+  <span class="badge">{len(good)} прибыльных</span>
+  <span class="badge grey">T5-T7 | @1-@3</span>
+  <span class="ts">Обновлено: {ts} · страница обновляется каждые 10 мин</span>
+</div>
+<div class="container">
+
+<div class="stats">
+  <div class="stat">
+    <div class="stat-value">{len(good)}</div>
+    <div class="stat-label">Прибыльных позиций</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">{max((r["profit_avg"] for r in good), default=0):,}</div>
+    <div class="stat-label">Макс. профит (сер.)</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">{len(profit_rows)}</div>
+    <div class="stat-label">Всего проверено</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:#8b949e">500 000</div>
+    <div class="stat-label">Порог уведомления</div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">🏆 Прибыльные позиции (top {min(50, len(good))})</div>
+  <table>
+    <thead><tr>
+      <th>Тир</th><th>Предмет</th><th>Качество</th>
+      <th>Профит AVG</th><th>ROI</th>
+      <th>База Caerleon</th><th>ЧР Buy</th><th>Вложить</th>
+      <th>Материалы (кол-во × цена)</th><th>Обновлено</th>
+    </tr></thead>
+    <tbody>{good_rows_html}</tbody>
+  </table>
+</div>
+
+<div class="section">
+  <details>
+    <summary>📦 Цены материалов (Руны / Души / Реликты)</summary>
+    <br>
+    <table>
+      <thead><tr>
+        <th>Материал</th><th>Sell Min</th><th>AVG 24ч</th><th>Sell Max</th><th>Объём</th>
+      </tr></thead>
+      <tbody>{mat_rows_html}</tbody>
+    </table>
+  </details>
+</div>
+
+<div class="section">
+  <details>
+    <summary>📊 Все позиции с данными ({len(all_with_data)} записей)</summary>
+    <br>
+    <table>
+      <thead><tr>
+        <th>Тир</th><th>Предмет</th><th>Качество</th>
+        <th>Профит AVG</th><th>Профит BEST</th><th>Профит WORST</th>
+        <th>ЧР Buy</th><th>Обновлено</th>
+      </tr></thead>
+      <tbody>{all_rows_html}</tbody>
+    </table>
+  </details>
+</div>
+
+</div>
+<div class="footer">
+  Albion Online Europe · europe.albion-online-data.com · только Normal quality · обновляется каждые 10 мин
+</div>
+</body>
+</html>"""
+
+
+def save_html_report(html: str):
+    """Сохраняет HTML-отчёт в docs/index.html для GitHub Pages."""
+    import os as _os2
+    _os2.makedirs("docs", exist_ok=True)
+    with open("docs/index.html", "w", encoding="utf-8") as f:
+        f.write(html)
+    print("  docs/index.html сохранён")
+
 
 
 def write_github_summary(markdown: str):
@@ -844,6 +1038,10 @@ def scan_once(seen_alerts: set) -> set:
     write_github_summary(summary_md)
     if GIST_ID:
         update_gist(summary_md, GIST_ID, GITHUB_TOKEN)
+
+    # ── GitHub Pages HTML ──────────────────────────────────────
+    html = build_html_report(profit_rows, mat_csv_rows, ts)
+    save_html_report(html)
 
     print()
     print(f"  ├ raw_prices.csv       {len(raw_rows):>6,} строк")
