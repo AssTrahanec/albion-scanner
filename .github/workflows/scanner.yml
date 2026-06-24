@@ -1,8 +1,6 @@
 name: Albion BM Scanner
 
 on:
-  schedule:
-    - cron: "*/10 * * * *"
   workflow_dispatch:
 
 # Нужны права для записи в репо (GitHub Pages)
