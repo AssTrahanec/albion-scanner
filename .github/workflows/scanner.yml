@@ -2,8 +2,8 @@ name: Albion BM Scanner
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
-  workflow_dispatch:
+    - cron: "*/10 * * * *"   # каждые 10 минут (публичное репо = бесплатно)
+  workflow_dispatch:           # кнопка ручного запуска
 
 jobs:
   scan:
