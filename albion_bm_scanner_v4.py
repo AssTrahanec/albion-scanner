@@ -1,34 +1,16 @@
 #!/usr/bin/env python3
-"""
-Albion Online — Black Market Enchanting Arbitrage Scanner v4
-=============================================================
-Запуск: python3 albion_bm_scanner_v4.py
-Требует: pip install requests
-
-Что нового в v4:
-  ✅ Русские названия предметов (из items.json или встроенный словарь)
-  ✅ Явный вывод: "купить нужно X Рун + Y Душ + Z Реликтов"
-  ✅ Три сценария цены: BEST(min) / AVG(24h) / WORST(max)
-  ✅ Все качества: Normal(1) Good(2) Outstanding(3) Excellent(4)
-  ✅ Все зачарования: @1 @2 @3
-  ✅ Тиры 5 / 6 / 7
-
-items.json НЕ ОБЯЗАТЕЛЕН — если есть рядом, названия будут на русском;
-если нет или сломан — используется встроенный словарь.
-
-Выходные файлы:
-  materials_prices.csv  — цены рун/душ/реликтов
-  raw_prices.csv        — все сырые цены (предмет × качество × зачарование)
-  profit_analysis.csv   — анализ прибыли, сортировка по profit_avg
-"""
-
 import requests
 import csv
 import json
 import re
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+
+MSK = timezone(timedelta(hours=3))  # Москва UTC+3
+
+def now_msk() -> str:
+    return datetime.now(MSK).strftime("%d.%m.%Y %H:%M МСК")
 
 # ─────────────────────────────────────────────────────────────
 #  НАСТРОЙКИ
@@ -100,13 +82,13 @@ def build_tg_message(alerts: list) -> str:
     Компактное уведомление — одна карточка на позицию.
     Формат: T6.2 Название (Качество) | Профит | База | ЧР | Время
     """
-    ts = datetime.now(timezone.utc).strftime("%H:%M UTC")
+    ts = now_msk()
     header = (
         f"🚨 <b>Albion BM — найдено {len(alerts)} позиций > {PROFIT_THRESHOLD:,} сер.</b>  "
         f"({ts})"
     )
     cards = [header, ""]
-    for r in alerts[:15]:
+    for r in alerts[:20]:
         tier_enc  = f"T{r['tier']}.{r['enchant']}"          # напр. T6.2
         quality   = QUALITY_RU.get(r["quality"], "?")        # Хорошее
         q_icon    = {1: "⚪", 2: "🟢", 3: "🔵", 4: "🟡"}.get(r["quality"], "⚪")
@@ -121,8 +103,8 @@ def build_tg_message(alerts: list) -> str:
         cards.append(line)
         cards.append("")
 
-    if len(alerts) > 15:
-        cards.append(f"<i>...и ещё {len(alerts) - 15} позиций в profit_analysis.csv</i>")
+    if len(alerts) > 20:
+        cards.append(f"<i>...и ещё {len(alerts) - 20} позиций в profit_analysis.csv</i>")
 
     return "\n".join(cards)
 
@@ -602,7 +584,7 @@ def scan_once(seen_alerts: set) -> set:
     seen_alerts — set ключей уже отправленных уведомлений (item+enc+quality).
     Возвращает обновлённый seen_alerts.
     """
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    ts = now_msk()
     print("=" * 70)
     print("  Albion Online — BM Enchanting Arbitrage Scanner v4")
     print(f"  Время: {ts}  |  Сервер: {SERVER}")
@@ -941,7 +923,7 @@ def main():
             print()
             print(sep)
             print("  СКАН #" + str(scan_num) + "  |  " +
-                  datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"))
+                  now_msk())
             print(sep)
             try:
                 seen = scan_once(seen)
